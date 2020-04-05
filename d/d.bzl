@@ -97,6 +97,7 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
             "-debug",
             "-w",
             "-g",
+            "-m64",
         ] +
         ["-I%s/%s" % (ctx.label.package, im) for im in ctx.attr.imports] +
         ["-I%s" % im for im in depinfo.imports] +
@@ -116,6 +117,7 @@ def _build_link_command(ctx, objs, out, depinfo):
         depinfo.setup_cmd +
         [toolchain.d_compiler_path] +
         ["-of" + out.path] +
+        [ "-m64" ] +
         toolchain.link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
@@ -149,7 +151,7 @@ def _setup_deps(deps, name, working_dir):
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
     """
-    deps_dir = working_dir + "/" + name + ".deps"
+    deps_dir = working_dir + "/" + name + "-deps"
     setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
 
     libs = []
@@ -269,7 +271,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
       name += ".exe"
 
     d_bin = ctx.actions.declare_file(name)
-    d_obj = ctx.actions.declare_file(d_bin.basename + ".o")
+    d_obj = ctx.actions.declare_file(d_bin.basename + (".obj" if windows else ".o"))
     depinfo = _setup_deps(ctx.attr.deps, ctx.label.name, d_bin.dirname)
 
     # Build compile command

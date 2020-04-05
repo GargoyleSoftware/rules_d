@@ -263,7 +263,12 @@ def _d_library_impl(ctx):
 
 def _d_binary_impl_common(ctx, extra_flags = []):
     """Common implementation for rules that build a D binary."""
-    d_bin = ctx.outputs.executable
+    name = ctx.label.name
+    windows = True
+    if windows:
+      name += ".exe"
+
+    d_bin = ctx.actions.declare_file(name)
     d_obj = ctx.actions.declare_file(d_bin.basename + ".o")
     depinfo = _setup_deps(ctx.attr.deps, ctx.label.name, d_bin.dirname)
 
@@ -323,6 +328,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         d_srcs = ctx.files.srcs,
         transitive_d_srcs = depset(depinfo.d_srcs),
         imports = ctx.attr.imports,
+        executable = d_bin,
     )
 
 def _d_binary_impl(ctx):

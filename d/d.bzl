@@ -532,11 +532,17 @@ config_setting(
     values = {"host_cpu": "k8"},
 )
 
+config_setting(
+    name = "x64_windows",
+    values = {"host_cpu": "x64_windows"},
+)
+
 filegroup(
     name = "dmd",
     srcs = select({
         ":darwin": ["dmd2/osx/bin/dmd"],
         ":k8": ["dmd2/linux/bin64/dmd"],
+        ":x64_windows": ["dmd2/windows/bin64/dmd.exe"],
     }),
 )
 
@@ -548,6 +554,7 @@ filegroup(
             "dmd2/linux/lib64/libphobos2.a",
             "dmd2/linux/lib64/libphobos2.so",
         ],
+        ":x64_windows": ["dmd2/windows/lib/phobos.lib"],
     }),
 )
 
@@ -581,5 +588,14 @@ def d_repositories():
             "http://downloads.dlang.org/releases/2020/dmd.2.090.0.osx.tar.xz",
         ],
         sha256 = "6f1120e1fabda1d9da39bbe9cdd1b0886003f435948c15b6457fc6dada7bd344",
+        build_file_content = DMD_BUILD_FILE,
+    )
+
+    http_archive(
+        name = "dmd_windows_x86_64",
+        urls = [
+            "http://downloads.dlang.org/releases/2020/dmd.2.091.0.windows.zip",
+        ],
+        sha256 = "e47b4229cab3c8a6bf096cbf3e04dabb4f77d225b627dc06fac27b03b4587df8",
         build_file_content = DMD_BUILD_FILE,
     )

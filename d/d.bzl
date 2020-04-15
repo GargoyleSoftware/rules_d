@@ -119,6 +119,31 @@ def _build_link_command(ctx, objs, out, depinfo):
         toolchain.link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
+        ["-L-lstdc++"] +
+        # TODO: These should be covered somewhere else...
+        ["-L-lGL"] +
+        ["-L-lXt"] +
+        ["-L-lfreeimage"] +
+        ["-L-lX11"] +
+        ["-L-lXaw"] +
+        ["-L-lzzip"] +
+        ["-L-lXrandr"] +
+        ["-L-lSDL2"] +
+        # TODO: see if these lines are necessary
+        ["-L-llib"] +
+        ["-L-lPbs"] +
+        ["-L-lGL3Plus"] +
+        ["-L-lOgreMain"] +
+        ["-L-lOverlay"] +
+        ["-L-lfreetype"] +
+        ["-L-lHlmsCommon"] +
+        ["-L-lUnlit"] +
+        ["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ] +
+        ["-L-lCommonBoog"] +
+
+        ["-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ] +
+        ["-L-lhelloOpenVR"] +
+        #["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/OgreMain" ] +
         objs
     )
     return " ".join(cmd)
@@ -152,14 +177,14 @@ def _setup_deps(deps, name, working_dir):
     deps_dir = working_dir + "/" + name + ".deps"
     setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
 
-    libs = []
-    transitive_libs = []
-    d_srcs = []
+    libs              = []
+    transitive_libs   = []
+    d_srcs            = []
     transitive_d_srcs = []
-    versions = []
-    imports = []
-    link_flags = []
-    symlinked_libs = []
+    versions          = []
+    imports           = []
+    link_flags        = []
+    symlinked_libs    = []
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.

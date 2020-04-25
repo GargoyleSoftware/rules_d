@@ -16,9 +16,8 @@
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-def a_filetype(files):
-    windows = True
-    if windows:
+def a_filetype(ctx, files):
+    if _is_windows(ctx):
         return [f for f in files if f.basename.endswith(".lib")]
     else:
         return [f for f in files if f.basename.endswith(".a")]
@@ -26,6 +25,9 @@ def a_filetype(files):
 D_FILETYPE = [".d", ".di"]
 
 ZIP_PATH = "/usr/bin/zip"
+
+def _is_windows(ctx):
+  return ctx.configuration.host_path_separator == ';'
 
 def _relative(src_path, dest_path):
     """Returns the relative path from src_path to dest_path."""
@@ -74,11 +76,10 @@ def _d_toolchain(ctx):
             to the import paths.
     """
 
-    windows = True
     d_compiler_path = ctx.file._d_compiler.path
     return struct(
         d_compiler_path = d_compiler_path,
-        link_flags = [("-L/LIBPATH:" if windows else "-L-L") + ctx.files._d_stdlib[0].dirname],
+        link_flags = [("-L/LIBPATH:" if _is_windows(ctx) else "-L-L") + ctx.files._d_stdlib[0].dirname],
         import_flags = [
             "-I" + _files_directory(ctx.files._d_stdlib_src),
             "-I" + _files_directory(ctx.files._d_runtime_import_src),
@@ -98,7 +99,8 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
         [toolchain.d_compiler_path] +
         extra_flags + [
             "-of" + out.path,
-            "-I.",
+            #"-I.",
+            "-Id",
             "-debug",
             "-w",
             "-g",
@@ -116,7 +118,6 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
 
 def _build_link_command(ctx, objs, out, depinfo):
     """Returns a string containing the D link command."""
-    windows = True
     toolchain = _d_toolchain(ctx)
     cmd = (
         ["set -e;"] +
@@ -130,7 +131,7 @@ def _build_link_command(ctx, objs, out, depinfo):
         (["-L/DEFAULTLIB:user32",
           "-L/NODEFAULTLIB:libcmt",
           "-L/DEFAULTLIB:msvcrt",
-          ] if windows else [
+          ] if _is_windows(ctx) else [
           "-L-lstdc++",
           #TODO: These should be covered somewhere else...
           "-L-lGL",
@@ -142,26 +143,25 @@ def _build_link_command(ctx, objs, out, depinfo):
           "-L-lXrandr",
           "-L-lSDL2",
           #TODO: see if these lines are necessary
-          "-L-llib",
-          "-L-lPbs",
-          "-L-lGL3Plus",
-          "-L-lOgreMain",
-          "-L-lOverlay",
-          "-L-lfreetype",
-          "-L-lHlmsCommon",
-          "-L-lUnlit",
-          "-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ,
-          "-L-lCommonBoog",
-
-          "-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ,
-          "-L-lhelloOpenVR",
+          #"-L-llib",
+          #"-L-lPbs",
+          #"-L-lGL3Plus",
+          #"-L-lOgreMain",
+          #"-L-lOverlay",
+          #"-L-lfreetype",
+          #"-L-lHlmsCommon",
+          #"-L-lUnlit",
+          #"-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ,
+          #"-L-lCommonBoog",
+          #"-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ,
+          #"-L-lhelloOpenVR",
           ]) +
         #["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/OgreMain" ] +
         objs
     )
     return " ".join(cmd)
 
-def _setup_deps(deps, name, working_dir):
+def _setup_deps(ctx, deps, name, working_dir):
     """Sets up dependencies.
 
     Walks through dependencies and constructs the commands and flags needed
@@ -187,10 +187,9 @@ def _setup_deps(deps, name, working_dir):
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
     """
-    windows = True
     deps_dir = working_dir + "/" + name + ".deps"
     setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
-
+    windows = _is_windows(ctx)
     libs              = []
     transitive_libs   = []
     d_srcs            = []
@@ -226,7 +225,7 @@ def _setup_deps(deps, name, working_dir):
 
         elif CcInfo in dep:
             # The dependency is a cc_library
-            native_libs = a_filetype(_get_libs_for_static_executable(dep))
+            native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
             symlinked_libs.append(depset(native_libs))
@@ -264,7 +263,7 @@ def _d_library_impl(ctx):
     d_lib = ctx.outputs.d_lib
 
     # Dependencies
-    depinfo = _setup_deps(ctx.attr.deps, ctx.label.name, d_lib.dirname)
+    depinfo = _setup_deps(ctx, ctx.attr.deps, ctx.label.name, d_lib.dirname)
 
     # Build compile command.
     cmd = _build_compile_command(
@@ -312,13 +311,13 @@ def _d_library_impl(ctx):
 def _d_binary_impl_common(ctx, extra_flags = []):
     """Common implementation for rules that build a D binary."""
     name = ctx.label.name
-    windows = True
+    windows = _is_windows(ctx)
     if windows:
       name += ".exe"
 
     d_bin = ctx.actions.declare_file(name)
     d_obj = ctx.actions.declare_file(ctx.label.name + (".obj" if windows else ".o"))
-    depinfo = _setup_deps(ctx.attr.deps, ctx.label.name, d_bin.dirname)
+    depinfo = _setup_deps(ctx, ctx.attr.deps, ctx.label.name, d_bin.dirname)
 
     # Build compile command
     compile_cmd = _build_compile_command(

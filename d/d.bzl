@@ -17,7 +17,11 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def a_filetype(files):
-    return [f for f in files if f.basename.endswith(".a")]
+    windows = True
+    if windows:
+        return [f for f in files if f.basename.endswith(".lib")]
+    else:
+        return [f for f in files if f.basename.endswith(".a")]
 
 D_FILETYPE = [".d", ".di"]
 
@@ -70,10 +74,11 @@ def _d_toolchain(ctx):
             to the import paths.
     """
 
+    windows = True
     d_compiler_path = ctx.file._d_compiler.path
     return struct(
         d_compiler_path = d_compiler_path,
-        link_flags = ["-L-L" + ctx.files._d_stdlib[0].dirname],
+        link_flags = [("-L/LIBPATH:" if windows else "-L-L") + ctx.files._d_stdlib[0].dirname],
         import_flags = [
             "-I" + _files_directory(ctx.files._d_stdlib_src),
             "-I" + _files_directory(ctx.files._d_runtime_import_src),
@@ -97,6 +102,7 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
             "-debug",
             "-w",
             "-g",
+            "-m64",
         ] +
         ["-I%s/%s" % (ctx.label.package, im) for im in ctx.attr.imports] +
         ["-I%s" % im for im in depinfo.imports] +
@@ -110,6 +116,7 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
 
 def _build_link_command(ctx, objs, out, depinfo):
     """Returns a string containing the D link command."""
+    windows = True
     toolchain = _d_toolchain(ctx)
     cmd = (
         ["set -e;"] +
@@ -119,30 +126,36 @@ def _build_link_command(ctx, objs, out, depinfo):
         toolchain.link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
-        ["-L-lstdc++"] +
-        # TODO: These should be covered somewhere else...
-        ["-L-lGL"] +
-        ["-L-lXt"] +
-        ["-L-lfreeimage"] +
-        ["-L-lX11"] +
-        ["-L-lXaw"] +
-        ["-L-lzzip"] +
-        ["-L-lXrandr"] +
-        ["-L-lSDL2"] +
-        # TODO: see if these lines are necessary
-        ["-L-llib"] +
-        ["-L-lPbs"] +
-        ["-L-lGL3Plus"] +
-        ["-L-lOgreMain"] +
-        ["-L-lOverlay"] +
-        ["-L-lfreetype"] +
-        ["-L-lHlmsCommon"] +
-        ["-L-lUnlit"] +
-        ["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ] +
-        ["-L-lCommonBoog"] +
+        ["-m64"] +
+        (["-L/DEFAULTLIB:user32",
+          "-L/NODEFAULTLIB:libcmt",
+          "-L/DEFAULTLIB:msvcrt",
+          ] if windows else [
+          "-L-lstdc++",
+          #TODO: These should be covered somewhere else...
+          "-L-lGL",
+          "-L-lXt",
+          "-L-lfreeimage",
+          "-L-lX11",
+          "-L-lXaw",
+          "-L-lzzip",
+          "-L-lXrandr",
+          "-L-lSDL2",
+          #TODO: see if these lines are necessary
+          "-L-llib",
+          "-L-lPbs",
+          "-L-lGL3Plus",
+          "-L-lOgreMain",
+          "-L-lOverlay",
+          "-L-lfreetype",
+          "-L-lHlmsCommon",
+          "-L-lUnlit",
+          "-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ,
+          "-L-lCommonBoog",
 
-        ["-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ] +
-        ["-L-lhelloOpenVR"] +
+          "-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ,
+          "-L-lhelloOpenVR",
+          ]) +
         #["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/OgreMain" ] +
         objs
     )
@@ -174,6 +187,7 @@ def _setup_deps(deps, name, working_dir):
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
     """
+    windows = True
     deps_dir = working_dir + "/" + name + ".deps"
     setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
 
@@ -194,7 +208,10 @@ def _setup_deps(deps, name, working_dir):
             d_srcs += dep.d_srcs
             transitive_d_srcs.append(dep.transitive_d_srcs)
             versions += dep.versions + ["Have_%s" % _format_version(dep.label.name)]
-            link_flags += ["-L-l%s" % dep.label.name] + dep.link_flags
+            if windows:
+                link_flags += ["-L%s.lib" % dep.label.name] + dep.link_flags
+            else:
+                link_flags += ["-L-l%s" % dep.label.name] + dep.link_flags
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
 
         elif hasattr(dep, "d_srcs"):
@@ -213,8 +230,14 @@ def _setup_deps(deps, name, working_dir):
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
             symlinked_libs.append(depset(native_libs))
-            link_flags += ["-L-l%s" % dep.label.name]
-
+            if windows:
+                for f in native_libs:
+                    if f.extension == "exe": # FIXME: special case for helloOpenVr.exe, probably wrong behavior.
+                        link_flags += ["-L/LIBPATH:%s" % (f.dirname,), "-L%slib" % (str(f.basename)[0 : -3],)]
+                    else:
+                        link_flags += ["-L%s" % (f.basename,)]
+            else:
+                link_flags += ["-L-l%s" % dep.label.name]
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")
@@ -233,7 +256,7 @@ def _setup_deps(deps, name, working_dir):
         setup_cmd = setup_cmd,
         imports = depset(imports).to_list(),
         link_flags = depset(link_flags).to_list(),
-        lib_flags = ["-L-L%s" % deps_dir],
+        lib_flags = ["-L/LIBPATH:%s" % deps_dir] if windows else ["-L-L%s" % deps_dir],
     )
 
 def _d_library_impl(ctx):
@@ -294,7 +317,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
       name += ".exe"
 
     d_bin = ctx.actions.declare_file(name)
-    d_obj = ctx.actions.declare_file(d_bin.basename + ".o")
+    d_obj = ctx.actions.declare_file(ctx.label.name + (".obj" if windows else ".o"))
     depinfo = _setup_deps(ctx.attr.deps, ctx.label.name, d_bin.dirname)
 
     # Build compile command
@@ -585,7 +608,7 @@ filegroup(
             "dmd2/linux/lib64/libphobos2.a",
             "dmd2/linux/lib64/libphobos2.so",
         ],
-        ":x64_windows": ["dmd2/windows/lib/phobos.lib"],
+        ":x64_windows": ["dmd2/windows/lib64/phobos64.lib"],
     }),
 )
 

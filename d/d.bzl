@@ -129,30 +129,7 @@ def _build_link_command(ctx, objs, out, depinfo):
           "-L/DEFAULTLIB:msvcrt",
           ] if _is_windows(ctx) else [
           "-L-lstdc++",
-          #TODO: These should be covered somewhere else...
-          "-L-lGL",
-          "-L-lXt",
-          "-L-lfreeimage",
-          "-L-lX11",
-          "-L-lXaw",
-          "-L-lzzip",
-          "-L-lXrandr",
-          "-L-lSDL2",
-          #TODO: see if these lines are necessary
-          #"-L-llib",
-          #"-L-lPbs",
-          #"-L-lGL3Plus",
-          #"-L-lOgreMain",
-          #"-L-lOverlay",
-          #"-L-lfreetype",
-          #"-L-lHlmsCommon",
-          #"-L-lUnlit",
-          #"-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/Samples/2.0/Common" ,
-          #"-L-lCommonBoog",
-          #"-L-Lbazel-out/k8-fastbuild/bin/cpp/helloOpenVR" ,
-          #"-L-lhelloOpenVR",
           ]) +
-        #["-L-Lbazel-out/k8-fastbuild/bin/subprojects/ogre2/OgreMain" ] +
         objs
     )
     return " ".join(cmd)

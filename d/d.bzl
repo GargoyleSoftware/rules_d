@@ -97,14 +97,10 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
         ["set -e;"] +
         depinfo.setup_cmd +
         [toolchain.d_compiler_path] +
+        ["-Id -debug -w -g -m64"] +
         extra_flags + [
             "-of" + out.path,
             #"-I.",
-            "-Id",
-            "-debug",
-            "-w",
-            "-g",
-            "-m64",
         ] +
         ["-I%s/%s" % (ctx.label.package, im) for im in ctx.attr.imports] +
         ["-I%s" % im for im in depinfo.imports] +
@@ -124,10 +120,10 @@ def _build_link_command(ctx, objs, out, depinfo):
         depinfo.setup_cmd +
         [toolchain.d_compiler_path] +
         ["-of" + out.path] +
+        ["-m64"] +
         toolchain.link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
-        ["-m64"] +
         (["-L/DEFAULTLIB:user32",
           "-L/NODEFAULTLIB:libcmt",
           "-L/DEFAULTLIB:msvcrt",

@@ -201,15 +201,8 @@ def _setup_deps(ctx, deps, name, working_dir):
             native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
-            symlinked_libs.append(depset(native_libs))
-            if windows:
-                for f in native_libs:
-                    if f.extension == "exe": # FIXME: special case for helloOpenVr.exe, probably wrong behavior.
-                        link_flags += ["-L/LIBPATH:%s" % (f.dirname,), "-L%slib" % (str(f.basename)[0 : -3],)]
-                    else:
-                        link_flags += ["-L%s" % (f.basename,)]
-            else:
-                link_flags += ["-L-l%s" % dep.label.name]
+            #symlinked_libs.append(depset(native_libs))
+            link_flags += [f.path for f in native_libs]
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")

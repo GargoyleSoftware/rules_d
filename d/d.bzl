@@ -392,7 +392,7 @@ def _d_source_library_impl(ctx):
 
         elif CcInfo in dep:
             # Dependency is a cc_library target.
-            native_libs = a_filetype(_get_libs_for_static_executable(dep))
+            native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             transitive_libs.extend(native_libs)
             transitive_linkopts = depset(["-l%s" % dep.label.name], transitive = [transitive_linkopts])
 

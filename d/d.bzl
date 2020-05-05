@@ -203,6 +203,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             transitive_libs.append(depset(native_libs))
             #symlinked_libs.append(depset(native_libs))
             link_flags += [f.path for f in native_libs]
+            link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags]
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")

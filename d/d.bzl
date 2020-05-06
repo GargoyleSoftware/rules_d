@@ -171,7 +171,7 @@ def _setup_deps(ctx, deps, name, working_dir):
     transitive_d_srcs = []
     versions          = []
     imports           = []
-    link_flags        = []
+    link_flags        = ["-L%s" % (linkopt,) for linkopt in ctx.attr.linkopts]
     symlinked_libs    = []
     dynamic_libraries_for_runtime = []
     for dep in deps:

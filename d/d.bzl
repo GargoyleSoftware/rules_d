@@ -159,6 +159,8 @@ def _setup_deps(ctx, deps, name, working_dir):
             to the D compiler via -I flags.
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
+        dynamic_libraries_for_runtime: depset of dynamic libraries to be copied
+        copied_dynamic_libraries_for_runtime: list of destination copied dynamic libraries
     """
     deps_dir = working_dir + "/" + name + ".deps"
     setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
@@ -171,6 +173,7 @@ def _setup_deps(ctx, deps, name, working_dir):
     imports           = []
     link_flags        = []
     symlinked_libs    = []
+    dynamic_libraries_for_runtime = []
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.
@@ -206,9 +209,17 @@ def _setup_deps(ctx, deps, name, working_dir):
             # FIXME: there is a hack that filters out -Lbazel-out\x64_windows-fastbuild\bin\subprojects\ogre2\OgreMain\OgreWin32Resources.res
             # but it should be replaced with a real solution.
             link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags if not f.endswith(".res")]
+            dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")
+
+    dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime)
+    copied_dynamic_libraries_for_runtime = []
+    for lib in dynamic_libraries_for_runtime.to_list():
+        copy = working_dir + "/" + lib.basename
+        copied_dynamic_libraries_for_runtime.append(ctx.actions.declare_file(lib.basename))
+        setup_cmd.append("cp -f \"" + lib.path + "\" \"" + copy + "\"\n")
 
     setup_cmd += [
         _create_setup_cmd(lib, deps_dir)
@@ -225,6 +236,8 @@ def _setup_deps(ctx, deps, name, working_dir):
         imports = depset(imports).to_list(),
         link_flags = depset(link_flags).to_list(),
         lib_flags = ["-L/LIBPATH:%s" % deps_dir] if windows else ["-L-L%s" % deps_dir],
+        dynamic_libraries_for_runtime = dynamic_libraries_for_runtime,
+        copied_dynamic_libraries_for_runtime = copied_dynamic_libraries_for_runtime,
     )
 
 def _d_library_impl(ctx):
@@ -253,6 +266,7 @@ def _d_library_impl(ctx):
             depinfo.transitive_d_srcs,
             depinfo.libs,
             depinfo.transitive_libs,
+            depinfo.dynamic_libraries_for_runtime,
         ],
     )
 
@@ -310,7 +324,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
     ctx.actions.run_shell(
         inputs = compile_inputs,
         tools = [ctx.file._d_compiler],
-        outputs = [d_obj],
+        outputs = [d_obj] + depinfo.copied_dynamic_libraries_for_runtime,
         mnemonic = "Dcompile",
         command = compile_cmd,
         use_default_shell_env = True,
@@ -345,6 +359,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         transitive_d_srcs = depset(depinfo.d_srcs),
         imports = ctx.attr.imports,
         executable = d_bin,
+        runfiles = ctx.runfiles(files = depinfo.copied_dynamic_libraries_for_runtime),
     )
 
 def _d_binary_impl(ctx):
@@ -354,6 +369,16 @@ def _d_binary_impl(ctx):
 def _d_test_impl(ctx):
     """Implementation of the d_test rule."""
     return _d_binary_impl_common(ctx, extra_flags = ["-unittest"])
+
+def _get_dynamic_libraries_for_runtime(dep, linking_statically):
+    libraries = dep[CcInfo].linking_context.libraries_to_link.to_list()
+    dynamic_libraries_for_runtime = []
+    for lib in libraries:
+        if lib.dynamic_library != None:
+            #if lib.interface_library != None or not linking_statically or (lib.static_library == None and lib.pic_static_library == None):
+            if not linking_statically or (lib.static_library == None and lib.pic_static_library == None):
+                dynamic_libraries_for_runtime.append(lib.dynamic_library)
+    return dynamic_libraries_for_runtime
 
 def _get_libs_for_static_executable(dep):
     """

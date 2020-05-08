@@ -242,7 +242,7 @@ def _setup_deps(ctx, deps, name, working_dir):
 
 def _d_library_impl(ctx):
     """Implementation of the d_library rule."""
-    d_lib = ctx.outputs.d_lib
+    d_lib = ctx.actions.declare_file((ctx.label.name + ".lib") if _is_windows(ctx) else ("lib" + ctx.label.name + ".a"))
 
     # Dependencies
     depinfo = _setup_deps(ctx, ctx.attr.deps, ctx.label.name, d_lib.dirname)
@@ -531,9 +531,6 @@ _d_compile_attrs = {
 d_library = rule(
     _d_library_impl,
     attrs = dict(_d_common_attrs.items() + _d_compile_attrs.items()),
-    outputs = {
-        "d_lib": "lib%{name}.a",
-    },
 )
 
 d_source_library = rule(

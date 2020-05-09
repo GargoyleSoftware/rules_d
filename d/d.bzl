@@ -94,8 +94,6 @@ def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
     """Returns a string containing the D compile command."""
     toolchain = _d_toolchain(ctx)
     cmd = (
-        ["set -e;"] +
-        depinfo.setup_cmd +
         [toolchain.d_compiler_path] +
         ["-Id -debug -w -g -m64"] +
         extra_flags + [
@@ -324,7 +322,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
     ctx.actions.run_shell(
         inputs = compile_inputs,
         tools = [ctx.file._d_compiler],
-        outputs = [d_obj] + depinfo.copied_dynamic_libraries_for_runtime,
+        outputs = [d_obj],
         mnemonic = "Dcompile",
         command = compile_cmd,
         use_default_shell_env = True,
@@ -341,13 +339,13 @@ def _d_binary_impl_common(ctx, extra_flags = []):
 
     link_inputs = depset(
         [d_obj] + toolchain_files,
-        transitive = [depinfo.libs, depinfo.transitive_libs],
+        transitive = [depinfo.libs, depinfo.transitive_libs, depinfo.dynamic_libraries_for_runtime],
     )
 
     ctx.actions.run_shell(
         inputs = link_inputs,
         tools = [ctx.file._d_compiler],
-        outputs = [d_bin],
+        outputs = [d_bin] + depinfo.copied_dynamic_libraries_for_runtime,
         mnemonic = "Dlink",
         command = link_cmd,
         use_default_shell_env = True,

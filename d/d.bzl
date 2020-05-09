@@ -46,13 +46,6 @@ def _relative(src_path, dest_path):
 
     return relative_path
 
-def _create_setup_cmd(lib, deps_dir):
-    """Constructs a command for symlinking a library into the deps directory."""
-    return (
-        "ln -sf " + _relative(deps_dir, lib.path) + " " +
-        deps_dir + "/" + lib.basename + "\n"
-    )
-
 def _files_directory(files):
     """Returns the shortest parent directory of a list of files."""
     dir = files[0].dirname
@@ -108,16 +101,13 @@ def _build_compile_arglist(ctx, srcs, out, depinfo, extra_flags = []):
         )
 
 
-def _build_link_command(ctx, objs, out, depinfo):
+def _build_link_arglist(ctx, objs, out, depinfo):
     """Returns a string containing the D link command."""
-    toolchain = _d_toolchain(ctx)
-    cmd = (
-        ["set -e;"] +
-        depinfo.setup_cmd +
-        [toolchain.d_compiler_path] +
+    return (
         ["-of" + out.path] +
         ["-m64"] +
-        toolchain.link_flags +
+        [f.path for f in depset(transitive = [depinfo.libs, depinfo.transitive_libs]).to_list()] +
+        _d_toolchain(ctx).link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
         (["-L/DEFAULTLIB:user32",
@@ -128,7 +118,6 @@ def _build_link_command(ctx, objs, out, depinfo):
           ]) +
         objs
     )
-    return " ".join(cmd)
 
 def _setup_deps(ctx, deps, name, working_dir):
     """Sets up dependencies.
@@ -149,17 +138,12 @@ def _setup_deps(ctx, deps, name, working_dir):
         d_srcs: List of Files representing D source files of dependencies that
             will be used as inputs for this target.
         versions: List of D versions to be used for compiling the target.
-        setup_cmd: String containing the symlink commands to be used to set
-            up the dependencies.
         imports: List of Strings containing input paths that will be passed
             to the D compiler via -I flags.
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
         dynamic_libraries_for_runtime: depset of dynamic libraries to be copied
-        copied_dynamic_libraries_for_runtime: list of destination copied dynamic libraries
     """
-    deps_dir = working_dir + "/" + name + ".deps"
-    setup_cmd = ["rm -rf " + deps_dir + ";" + "mkdir -p " + deps_dir + ";"]
     windows = _is_windows(ctx)
     libs              = []
     transitive_libs   = []
@@ -168,40 +152,35 @@ def _setup_deps(ctx, deps, name, working_dir):
     versions          = []
     imports           = []
     link_flags        = ["-L%s" % (linkopt,) for linkopt in ctx.attr.linkopts]
-    symlinked_libs    = []
     dynamic_libraries_for_runtime = []
+    transitive_dynamic_libraries_for_runtime = []
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.
             libs.append(dep.d_lib)
             transitive_libs.append(dep.transitive_libs)
-            symlinked_libs.append(depset([dep.d_lib], transitive = [dep.transitive_libs]))
             d_srcs += dep.d_srcs
             transitive_d_srcs.append(dep.transitive_d_srcs)
             versions += dep.versions + ["Have_%s" % _format_version(dep.label.name)]
-            if windows:
-                link_flags += ["-L%s.lib" % dep.label.name] + dep.link_flags
-            else:
-                link_flags += ["-L-l%s" % dep.label.name] + dep.link_flags
+            link_flags.extend(dep.link_flags)
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
+            transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
 
         elif hasattr(dep, "d_srcs"):
             # The dependency is a d_source_library.
             d_srcs += dep.d_srcs
             transitive_d_srcs.append(dep.transitive_d_srcs)
             transitive_libs.append(dep.transitive_libs)
-            symlinked_libs.append(dep.transitive_libs)
             link_flags += ["-L%s" % linkopt for linkopt in dep.linkopts]
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
             versions += dep.versions
+            transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
 
         elif CcInfo in dep:
             # The dependency is a cc_library
             native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
-            #symlinked_libs.append(depset(native_libs))
-            link_flags += [f.path for f in native_libs]
             # FIXME: there is a hack that filters out -Lbazel-out\x64_windows-fastbuild\bin\subprojects\ogre2\OgreMain\OgreWin32Resources.res
             # but it should be replaced with a real solution.
             link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags if not f.endswith(".res")]
@@ -210,30 +189,16 @@ def _setup_deps(ctx, deps, name, working_dir):
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")
 
-    dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime)
-    copied_dynamic_libraries_for_runtime = []
-    for lib in dynamic_libraries_for_runtime.to_list():
-        copy = working_dir + "/" + lib.basename
-        copied_dynamic_libraries_for_runtime.append(ctx.actions.declare_file(lib.basename))
-        setup_cmd.append("cp -f \"" + lib.path + "\" \"" + copy + "\"\n")
-
-    setup_cmd += [
-        _create_setup_cmd(lib, deps_dir)
-        for lib in depset(transitive = symlinked_libs).to_list()
-    ]
-
     return struct(
         libs = depset(libs),
         transitive_libs = depset(transitive = transitive_libs),
         d_srcs = depset(d_srcs).to_list(),
         transitive_d_srcs = depset(transitive = transitive_d_srcs),
         versions = versions,
-        setup_cmd = setup_cmd,
         imports = depset(imports).to_list(),
         link_flags = depset(link_flags).to_list(),
-        lib_flags = ["-L/LIBPATH:%s" % deps_dir] if windows else ["-L-L%s" % deps_dir],
-        dynamic_libraries_for_runtime = dynamic_libraries_for_runtime,
-        copied_dynamic_libraries_for_runtime = copied_dynamic_libraries_for_runtime,
+        lib_flags = [],
+        dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
     )
 
 def _d_library_impl(ctx):
@@ -260,9 +225,6 @@ def _d_library_impl(ctx):
         ctx.files._d_runtime_import_src,
         transitive = [
             depinfo.transitive_d_srcs,
-            depinfo.libs,
-            depinfo.transitive_libs,
-            depinfo.dynamic_libraries_for_runtime,
         ],
     )
 
@@ -271,7 +233,7 @@ def _d_library_impl(ctx):
         tools = [ctx.file._d_compiler],
         outputs = [d_lib],
         mnemonic = "Dcompile",
-        executable = _d_toolchain(ctx).d_compiler_path,
+        executable = ctx.file._d_compiler.path,
         arguments = compile_args,
         use_default_shell_env = True,
         progress_message = "Compiling D library " + ctx.label.name,
@@ -281,11 +243,12 @@ def _d_library_impl(ctx):
         files = depset([d_lib]),
         d_srcs = ctx.files.srcs,
         transitive_d_srcs = depset(depinfo.d_srcs),
-        transitive_libs = depinfo.transitive_libs,
+        transitive_libs = depset(transitive = [depinfo.libs, depinfo.transitive_libs]),
         link_flags = depinfo.link_flags,
         versions = ctx.attr.versions,
         imports = ctx.attr.imports,
         d_lib = d_lib,
+        dynamic_libraries_for_runtime = depinfo.dynamic_libraries_for_runtime,
     )
 
 def _d_binary_impl_common(ctx, extra_flags = []):
@@ -323,14 +286,14 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         tools = [ctx.file._d_compiler],
         outputs = [d_obj],
         mnemonic = "Dcompile",
-        executable = _d_toolchain(ctx).d_compiler_path,
+        executable = ctx.file._d_compiler.path,
         arguments = compile_args,
         use_default_shell_env = True,
         progress_message = "Compiling D binary " + ctx.label.name,
     )
 
     # Build link command
-    link_cmd = _build_link_command(
+    link_args = _build_link_arglist(
         ctx = ctx,
         objs = [d_obj.path],
         depinfo = depinfo,
@@ -342,22 +305,36 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         transitive = [depinfo.libs, depinfo.transitive_libs, depinfo.dynamic_libraries_for_runtime],
     )
 
-    ctx.actions.run_shell(
+    ctx.actions.run(
         inputs = link_inputs,
         tools = [ctx.file._d_compiler],
-        outputs = [d_bin] + depinfo.copied_dynamic_libraries_for_runtime,
+        outputs = [d_bin],
         mnemonic = "Dlink",
-        command = link_cmd,
+        executable = ctx.file._d_compiler.path,
+        arguments = link_args,
         use_default_shell_env = True,
         progress_message = "Linking D binary " + ctx.label.name,
     )
+
+    copied_dynamic_libraries_for_runtime = []
+    for lib in depinfo.dynamic_libraries_for_runtime.to_list():
+        copy = ctx.actions.declare_file(lib.basename)
+        copied_dynamic_libraries_for_runtime.append(copy)
+        ctx.actions.run_shell(
+            inputs = [lib],
+            outputs = [copy],
+            mnemonic = "Dcopylib",
+            command = 'cp -f "%s" "%s/%s"' % (lib.path, d_bin.dirname, lib.basename),
+            use_default_shell_env = True,
+            progress_message = "Copying Execution Dynamic Library " + lib.basename,
+        )
 
     return struct(
         d_srcs = ctx.files.srcs,
         transitive_d_srcs = depset(depinfo.d_srcs),
         imports = ctx.attr.imports,
         executable = d_bin,
-        runfiles = ctx.runfiles(files = depinfo.copied_dynamic_libraries_for_runtime),
+        runfiles = ctx.runfiles(files = copied_dynamic_libraries_for_runtime),
     )
 
 def _d_binary_impl(ctx):
@@ -405,9 +382,12 @@ def _d_source_library_impl(ctx):
     """Implementation of the d_source_library rule."""
     transitive_d_srcs = []
     transitive_libs = []
+    transitive_transitive_libs = []
     transitive_imports = depset()
     transitive_linkopts = depset()
     transitive_versions = depset()
+    dynamic_libraries_for_runtime = []
+    transitive_dynamic_libraries_for_runtime = []
     for dep in ctx.attr.deps:
         if hasattr(dep, "d_srcs"):
             # Dependency is another d_source_library target.
@@ -415,12 +395,14 @@ def _d_source_library_impl(ctx):
             transitive_imports = depset(dep.imports, transitive = [transitive_imports])
             transitive_linkopts = depset(dep.linkopts, transitive = [transitive_linkopts])
             transitive_versions = depset(dep.versions, transitive = [transitive_versions])
+            transitive_transitive_libs.append(dep.transitive_libs)
+            transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
 
         elif CcInfo in dep:
             # Dependency is a cc_library target.
             native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             transitive_libs.extend(native_libs)
-            transitive_linkopts = depset(["-l%s" % dep.label.name], transitive = [transitive_linkopts])
+            dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
 
         else:
             fail("d_source_library can only depend on other " +
@@ -429,10 +411,11 @@ def _d_source_library_impl(ctx):
     return struct(
         d_srcs = ctx.files.srcs,
         transitive_d_srcs = depset(transitive = transitive_d_srcs, order = "postorder"),
-        transitive_libs = depset(transitive_libs),
+        transitive_libs = depset(transitive_libs, transitive = transitive_transitive_libs),
         imports = ctx.attr.imports + transitive_imports.to_list(),
         linkopts = ctx.attr.linkopts + transitive_linkopts.to_list(),
         versions = ctx.attr.versions + transitive_versions.to_list(),
+        dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
     )
 
 # TODO(dzc): Use ddox for generating HTML documentation.

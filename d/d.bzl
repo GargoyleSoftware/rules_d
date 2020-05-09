@@ -90,25 +90,23 @@ def _format_version(name):
     """Formats the string name to be used in a --version flag."""
     return name.replace("-", "_")
 
-def _build_compile_command(ctx, srcs, out, depinfo, extra_flags = []):
+def _build_compile_arglist(ctx, srcs, out, depinfo, extra_flags = []):
     """Returns a string containing the D compile command."""
-    toolchain = _d_toolchain(ctx)
-    cmd = (
-        [toolchain.d_compiler_path] +
-        ["-Id -debug -w -g -m64"] +
+    return (
+        ["-Id", "-debug", "-w", "-g", "-m64"] +
         extra_flags + [
             "-of" + out.path,
             #"-I.",
         ] +
         ["-I%s/%s" % (ctx.label.package, im) for im in ctx.attr.imports] +
         ["-I%s" % im for im in depinfo.imports] +
-        toolchain.import_flags +
+        _d_toolchain(ctx).import_flags +
         ["-version=Have_%s" % _format_version(ctx.label.name)] +
         ["-version=%s" % v for v in ctx.attr.versions] +
         ["-version=%s" % v for v in depinfo.versions] +
         srcs
-    )
-    return " ".join(cmd)
+        )
+
 
 def _build_link_command(ctx, objs, out, depinfo):
     """Returns a string containing the D link command."""
@@ -246,7 +244,7 @@ def _d_library_impl(ctx):
     depinfo = _setup_deps(ctx, ctx.attr.deps, ctx.label.name, d_lib.dirname)
 
     # Build compile command.
-    cmd = _build_compile_command(
+    compile_args = _build_compile_arglist(
         ctx = ctx,
         srcs = [src.path for src in ctx.files.srcs],
         out = d_lib,
@@ -268,12 +266,13 @@ def _d_library_impl(ctx):
         ],
     )
 
-    ctx.actions.run_shell(
+    ctx.actions.run(
         inputs = compile_inputs,
         tools = [ctx.file._d_compiler],
         outputs = [d_lib],
         mnemonic = "Dcompile",
-        command = cmd,
+        executable = _d_toolchain(ctx).d_compiler_path,
+        arguments = compile_args,
         use_default_shell_env = True,
         progress_message = "Compiling D library " + ctx.label.name,
     )
@@ -301,7 +300,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
     depinfo = _setup_deps(ctx, ctx.attr.deps, ctx.label.name, d_bin.dirname)
 
     # Build compile command
-    compile_cmd = _build_compile_command(
+    compile_args = _build_compile_arglist(
         ctx = ctx,
         srcs = [src.path for src in ctx.files.srcs],
         depinfo = depinfo,
@@ -319,12 +318,13 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         ctx.files.srcs + depinfo.d_srcs + toolchain_files,
         transitive = [depinfo.transitive_d_srcs],
     )
-    ctx.actions.run_shell(
+    ctx.actions.run(
         inputs = compile_inputs,
         tools = [ctx.file._d_compiler],
         outputs = [d_obj],
         mnemonic = "Dcompile",
-        command = compile_cmd,
+        executable = _d_toolchain(ctx).d_compiler_path,
+        arguments = compile_args,
         use_default_shell_env = True,
         progress_message = "Compiling D binary " + ctx.label.name,
     )

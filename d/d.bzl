@@ -157,7 +157,7 @@ def _setup_deps(ctx, deps, name, working_dir):
     link_flags        = ["-L%s" % (linkopt,) for linkopt in ctx.attr.linkopts]
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
-    dmd_args = [x for x in ctx.attr.dmd_args]
+    dmd_args = []
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.
@@ -192,6 +192,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")
+    dmd_args.extend([x for x in ctx.attr.dmd_args])
 
     return struct(
         libs = depset(libs),
@@ -394,7 +395,7 @@ def _d_source_library_impl(ctx):
     transitive_versions = depset()
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
-    dmd_args = [x for x in ctx.attr.dmd_args]
+    dmd_args = []
     for dep in ctx.attr.deps:
         if hasattr(dep, "d_srcs"):
             # Dependency is another d_source_library target.
@@ -415,6 +416,7 @@ def _d_source_library_impl(ctx):
         else:
             fail("d_source_library can only depend on other " +
                  "d_source_library or cc_library targets.", "deps")
+    dmd_args.extend([x for x in ctx.attr.dmd_args])
 
     return struct(
         d_srcs = ctx.files.srcs,

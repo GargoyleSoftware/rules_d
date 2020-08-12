@@ -111,9 +111,11 @@ def _build_link_arglist(ctx, objs, out, depinfo):
         _d_toolchain(ctx).link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
-        (["-L/DEFAULTLIB:user32",
-          "-L/NODEFAULTLIB:libcmt",
-          "-L/DEFAULTLIB:msvcrt",
+        (
+          [
+          # "-L/DEFAULTLIB:user32",
+          # "-L/NODEFAULTLIB:libcmt",
+          # "-L/DEFAULTLIB:msvcrt",
           ] if _is_windows(ctx) else [
           "-L-lstdc++",
           ]) +

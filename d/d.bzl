@@ -97,6 +97,7 @@ def _build_compile_arglist(ctx, srcs, out, depinfo, extra_flags = []):
         ["-version=Have_%s" % _format_version(ctx.label.name)] +
         ["-version=%s" % v for v in ctx.attr.versions] +
         ["-version=%s" % v for v in depinfo.versions] +
+        depinfo.dmd_args +
         srcs
         )
 
@@ -116,6 +117,7 @@ def _build_link_arglist(ctx, objs, out, depinfo):
           ] if _is_windows(ctx) else [
           "-L-lstdc++",
           ]) +
+        depinfo.dmd_args +
         objs
     )
 
@@ -143,6 +145,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         link_flags: List of linker flags.
         lib_flags: List of library search flags.
         dynamic_libraries_for_runtime: depset of dynamic libraries to be copied
+        dmd_args: Custom DMD args.
     """
     windows = _is_windows(ctx)
     libs              = []
@@ -154,6 +157,7 @@ def _setup_deps(ctx, deps, name, working_dir):
     link_flags        = ["-L%s" % (linkopt,) for linkopt in ctx.attr.linkopts]
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
+    dmd_args = [x for x in ctx.attr.dmd_args]
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.
@@ -165,6 +169,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             link_flags.extend(dep.link_flags)
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
+            dmd_args.extend(dep.dmd_args)
 
         elif hasattr(dep, "d_srcs"):
             # The dependency is a d_source_library.
@@ -175,6 +180,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
             versions += dep.versions
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
+            dmd_args.extend(dep.dmd_args)
 
         elif CcInfo in dep:
             # The dependency is a cc_library
@@ -197,6 +203,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         link_flags = depset(link_flags).to_list(),
         lib_flags = [],
         dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
+        dmd_args = dmd_args,
     )
 
 def _d_library_impl(ctx):
@@ -247,6 +254,7 @@ def _d_library_impl(ctx):
         imports = ctx.attr.imports,
         d_lib = d_lib,
         dynamic_libraries_for_runtime = depinfo.dynamic_libraries_for_runtime,
+        dmd_args = depinfo.dmd_args,
     )
 
 def _d_binary_impl_common(ctx, extra_flags = []):
@@ -386,6 +394,7 @@ def _d_source_library_impl(ctx):
     transitive_versions = depset()
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
+    dmd_args = [x for x in ctx.attr.dmd_args]
     for dep in ctx.attr.deps:
         if hasattr(dep, "d_srcs"):
             # Dependency is another d_source_library target.
@@ -395,6 +404,7 @@ def _d_source_library_impl(ctx):
             transitive_versions = depset(dep.versions, transitive = [transitive_versions])
             transitive_transitive_libs.append(dep.transitive_libs)
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
+            dmd_args.extend(dep.dmd_args)
 
         elif CcInfo in dep:
             # Dependency is a cc_library target.
@@ -414,6 +424,7 @@ def _d_source_library_impl(ctx):
         linkopts = ctx.attr.linkopts + transitive_linkopts.to_list(),
         versions = ctx.attr.versions + transitive_versions.to_list(),
         dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
+        dmd_args = dmd_args,
     )
 
 # TODO(dzc): Use ddox for generating HTML documentation.
@@ -487,6 +498,7 @@ _d_common_attrs = {
     "linkopts": attr.string_list(),
     "versions": attr.string_list(),
     "deps": attr.label_list(),
+    "dmd_args": attr.string_list(),
 }
 
 _d_compile_attrs = {

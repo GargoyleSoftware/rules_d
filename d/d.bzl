@@ -181,9 +181,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
-            # FIXME: there is a hack that filters out -Lbazel-out\x64_windows-fastbuild\bin\subprojects\ogre2\OgreMain\OgreWin32Resources.res
-            # but it should be replaced with a real solution.
-            link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags if not f.endswith(".res")]
+            link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags]
             dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +

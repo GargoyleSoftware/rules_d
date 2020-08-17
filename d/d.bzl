@@ -148,6 +148,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         lib_flags: List of library search flags.
         dynamic_libraries_for_runtime: depset of dynamic libraries to be copied
         dmd_args: Custom DMD args.
+        data: data runfiles
     """
     windows = _is_windows(ctx)
     libs              = []
@@ -160,6 +161,9 @@ def _setup_deps(ctx, deps, name, working_dir):
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
     dmd_args = []
+    data = []
+    for datum in ctx.attr.data:
+        data.extend(datum.files.to_list())
     for dep in deps:
         if hasattr(dep, "d_lib"):
             # The dependency is a d_library.
@@ -172,6 +176,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             imports += ["%s/%s" % (dep.label.package, im) for im in dep.imports]
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
             dmd_args.extend(dep.dmd_args)
+            data.extend(dep.data)
 
         elif hasattr(dep, "d_srcs"):
             # The dependency is a d_source_library.
@@ -183,6 +188,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             versions += dep.versions
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
             dmd_args.extend(dep.dmd_args)
+            data.extend(dep.data)
 
         elif CcInfo in dep:
             # The dependency is a cc_library
@@ -191,6 +197,9 @@ def _setup_deps(ctx, deps, name, working_dir):
             transitive_libs.append(depset(native_libs))
             link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags]
             dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
+            # TODO: collect c/c++ data transitively
+            #data.extend(dep[DefaultInfo].data_runfiles.files.to_list())
+
         else:
             fail("D targets can only depend on d_library, d_source_library, or " +
                  "cc_library targets.", "deps")
@@ -207,6 +216,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         lib_flags = [],
         dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
         dmd_args = dmd_args,
+        data = data,
     )
 
 def _d_library_impl(ctx):
@@ -258,6 +268,7 @@ def _d_library_impl(ctx):
         d_lib = d_lib,
         dynamic_libraries_for_runtime = depinfo.dynamic_libraries_for_runtime,
         dmd_args = depinfo.dmd_args,
+        data = depinfo.data,
     )
 
 def _d_binary_impl_common(ctx, extra_flags = []):
@@ -343,7 +354,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
         transitive_d_srcs = depset(depinfo.d_srcs),
         imports = ctx.attr.imports,
         executable = d_bin,
-        runfiles = ctx.runfiles(files = copied_dynamic_libraries_for_runtime),
+        runfiles = ctx.runfiles(files = copied_dynamic_libraries_for_runtime + depinfo.data),
     )
 
 def _d_binary_impl(ctx):
@@ -398,6 +409,9 @@ def _d_source_library_impl(ctx):
     dynamic_libraries_for_runtime = []
     transitive_dynamic_libraries_for_runtime = []
     dmd_args = []
+    data = []
+    for datum in ctx.attr.data:
+        data.extend(datum.files.to_list())
     for dep in ctx.attr.deps:
         if hasattr(dep, "d_srcs"):
             # Dependency is another d_source_library target.
@@ -408,12 +422,15 @@ def _d_source_library_impl(ctx):
             transitive_transitive_libs.append(dep.transitive_libs)
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
             dmd_args.extend(dep.dmd_args)
+            data.extend(dep.data)
 
         elif CcInfo in dep:
             # Dependency is a cc_library target.
             native_libs = a_filetype(ctx, _get_libs_for_static_executable(dep))
             transitive_libs.extend(native_libs)
             dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
+            # TODO: collect c/c++ data transitively
+            #data.extend(dep[DefaultInfo].data_runfiles.files.to_list())
 
         else:
             fail("d_source_library can only depend on other " +
@@ -429,6 +446,7 @@ def _d_source_library_impl(ctx):
         versions = ctx.attr.versions + transitive_versions.to_list(),
         dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
         dmd_args = dmd_args,
+        data = data,
     )
 
 # TODO(dzc): Use ddox for generating HTML documentation.
@@ -502,6 +520,7 @@ _d_common_attrs = {
     "linkopts": attr.string_list(),
     "versions": attr.string_list(),
     "deps": attr.label_list(),
+    "data": attr.label_list(allow_files = True),
     "dmd_args": attr.string_list(),
 }
 

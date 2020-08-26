@@ -149,6 +149,8 @@ def _setup_deps(ctx, deps, name, working_dir):
         dynamic_libraries_for_runtime: depset of dynamic libraries to be copied
         dmd_args: Custom DMD args.
         data: data runfiles
+        additional_linking_inputs: stuff that needs to be generated before linking
+            but is not a library
     """
     windows = _is_windows(ctx)
     libs              = []
@@ -162,6 +164,7 @@ def _setup_deps(ctx, deps, name, working_dir):
     transitive_dynamic_libraries_for_runtime = []
     dmd_args = []
     data = []
+    additional_linking_inputs = []
     for datum in ctx.attr.data:
         data.extend(datum.files.to_list())
     for dep in deps:
@@ -177,6 +180,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             transitive_dynamic_libraries_for_runtime.append(dep.dynamic_libraries_for_runtime)
             dmd_args.extend(dep.dmd_args)
             data.extend(dep.data)
+            additional_linking_inputs.extend(dep.additional_linking_inputs)
 
         elif hasattr(dep, "d_srcs"):
             # The dependency is a d_source_library.
@@ -196,6 +200,7 @@ def _setup_deps(ctx, deps, name, working_dir):
             libs.extend(native_libs)
             transitive_libs.append(depset(native_libs))
             link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags]
+            additional_linking_inputs.extend(dep[CcInfo].linking_context.additional_inputs.to_list())
             dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
             # TODO: collect c/c++ data transitively
             #data.extend(dep[DefaultInfo].data_runfiles.files.to_list())
@@ -217,6 +222,7 @@ def _setup_deps(ctx, deps, name, working_dir):
         dynamic_libraries_for_runtime = depset(dynamic_libraries_for_runtime, transitive = transitive_dynamic_libraries_for_runtime),
         dmd_args = dmd_args,
         data = data,
+        additional_linking_inputs = additional_linking_inputs,
     )
 
 def _d_library_impl(ctx):
@@ -269,6 +275,7 @@ def _d_library_impl(ctx):
         dynamic_libraries_for_runtime = depinfo.dynamic_libraries_for_runtime,
         dmd_args = depinfo.dmd_args,
         data = depinfo.data,
+        additional_linking_inputs = depinfo.additional_linking_inputs,
     )
 
 def _d_binary_impl_common(ctx, extra_flags = []):
@@ -321,7 +328,7 @@ def _d_binary_impl_common(ctx, extra_flags = []):
     )
 
     link_inputs = depset(
-        [d_obj] + toolchain_files,
+        [d_obj] + toolchain_files + depinfo.additional_linking_inputs,
         transitive = [depinfo.libs, depinfo.transitive_libs, depinfo.dynamic_libraries_for_runtime],
     )
 

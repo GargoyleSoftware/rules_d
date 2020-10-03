@@ -79,6 +79,22 @@ def _d_toolchain(ctx):
         ],
     )
 
+COMPILATION_MODE_FLAGS_POSIX = {
+    "fastbuild": ["-debug", "-g", "-L-lstdc++"],
+    "dbg": ["-debug", "-g", "-L-lstdc++"],
+    "opt": ["-checkaction=halt", "-boundscheck=safeonly", "-O", "-L-lstdc++"],
+}
+
+COMPILATION_MODE_FLAGS_WINDOWS = {
+    "fastbuild": ["-debug", "-g", "-m64", "-mscrtlib=msvcrt"],
+    "dbg": ["-debug", "-g", "-m64", "-mscrtlib=msvcrtd"],
+    "opt": ["-checkaction=halt", "-boundscheck=safeonly", "-O", "-m64", "-mscrtlib=msvcrt"],
+}
+
+def _compilation_mode_flags(ctx):
+    """Returns a list of flags to put at the start of the compile and link arglists."""
+    return (COMPILATION_MODE_FLAGS_WINDOWS if _is_windows(ctx) else COMPILATION_MODE_FLAGS_POSIX)[ctx.var["COMPILATION_MODE"]]
+
 def _format_version(name):
     """Formats the string name to be used in a --version flag."""
     return name.replace("-", "_")
@@ -86,7 +102,8 @@ def _format_version(name):
 def _build_compile_arglist(ctx, srcs, out, depinfo, extra_flags = []):
     """Returns a string containing the D compile command."""
     return (
-        ["-Id", "-debug", "-w", "-g", "-m64"] +
+        _compilation_mode_flags(ctx) +
+        ["-Id", "-w"] +
         extra_flags + [
             "-of" + out.path,
             #"-I.",
@@ -105,20 +122,12 @@ def _build_compile_arglist(ctx, srcs, out, depinfo, extra_flags = []):
 def _build_link_arglist(ctx, objs, out, depinfo):
     """Returns a string containing the D link command."""
     return (
+        _compilation_mode_flags(ctx) +
         ["-of" + out.path] +
-        ["-m64"] +
         [f.path for f in depset(transitive = [depinfo.libs, depinfo.transitive_libs]).to_list()] +
         _d_toolchain(ctx).link_flags +
         depinfo.lib_flags +
         depinfo.link_flags +
-        (
-          [
-          # "-L/DEFAULTLIB:user32",
-          # "-L/NODEFAULTLIB:libcmt",
-          # "-L/DEFAULTLIB:msvcrt",
-          ] if _is_windows(ctx) else [
-          "-L-lstdc++",
-          ]) +
         depinfo.dmd_args +
         objs
     )

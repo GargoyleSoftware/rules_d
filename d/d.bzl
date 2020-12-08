@@ -210,7 +210,10 @@ def _setup_deps(ctx, deps, name, working_dir):
             transitive_libs.append(depset(native_libs))
             link_flags += ["-L%s" % (f,) for f in dep[CcInfo].linking_context.user_link_flags]
             additional_linking_inputs.extend(dep[CcInfo].linking_context.additional_inputs.to_list())
-            dynamic_libraries_for_runtime.extend(_get_dynamic_libraries_for_runtime(dep, True))
+            dynlibs = _get_dynamic_libraries_for_runtime(dep, True)
+            if not _is_windows(ctx):
+                libs.extend(dynlibs)
+            dynamic_libraries_for_runtime.extend(dynlibs)
             # TODO: collect c/c++ data transitively
             #data.extend(dep[DefaultInfo].data_runfiles.files.to_list())
 
@@ -400,18 +403,17 @@ def _get_libs_for_static_executable(dep):
     Returns:
       A list of File instances, these are the libraries used for linking.
     """
-    libraries_to_link = dep[CcInfo].linking_context.libraries_to_link.to_list()
-
     libs = []
-    for library_to_link in libraries_to_link:
-        if library_to_link.static_library != None:
-            libs.append(library_to_link.static_library)
-        elif library_to_link.pic_static_library != None:
-            libs.append(library_to_link.pic_static_library)
-        elif library_to_link.interface_library != None:
-            libs.append(library_to_link.interface_library)
-        elif library_to_link.dynamic_library != None:
-            libs.append(library_to_link.dynamic_library)
+    for li in dep[CcInfo].linking_context.linker_inputs.to_list():
+        for library_to_link in li.libraries:
+            if library_to_link.static_library != None:
+                libs.append(library_to_link.static_library)
+            elif library_to_link.pic_static_library != None:
+                libs.append(library_to_link.pic_static_library)
+            elif library_to_link.interface_library != None:
+                libs.append(library_to_link.interface_library)
+            elif library_to_link.dynamic_library != None:
+                libs.append(library_to_link.dynamic_library)
     return libs
 
 def _d_source_library_impl(ctx):

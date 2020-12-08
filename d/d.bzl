@@ -634,7 +634,9 @@ filegroup(
 
 filegroup(
     name = "phobos-src",
-    srcs = glob(["dmd2/src/phobos/**/*.*"]),
+    srcs = glob([
+        "dmd2/src/phobos/**/*.*"
+    ]),
 )
 
 filegroup(
@@ -650,9 +652,10 @@ def d_repositories():
     http_archive(
         name = "dmd_linux_x86_64",
         urls = [
-            "http://downloads.dlang.org/releases/2020/dmd.2.094.0.linux.tar.xz",
+            # "https://github.com/ldc-developers/ldc/releases/download/v1.23.0/ldc2-1.23.0-linux-x86_64.tar.xz",
+            "http://downloads.dlang.org/releases/2.x/2.094.2/dmd.2.094.2.linux.tar.xz",
         ],
-        sha256 = "b77f8fdd7f0415d418eac3192186b7f4aa2f80e67bc415191cdd416548451576",
+        sha256 = "e29a9ca9595573d2d2cbd667403b2bc49ad9a06d6460d7f90306147731b9fe54",
         build_file_content = DMD_BUILD_FILE,
     )
 

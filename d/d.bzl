@@ -617,7 +617,7 @@ filegroup(
     name = "dmd",
     srcs = select({
         ":darwin": ["dmd2/osx/bin/dmd"],
-        ":k8": ["dmd2/linux/bin64/dmd"],
+        ":k8": ["ldc2-1.24.0-linux-x86_64/bin/ldmd2"],
         ":x64_windows": ["dmd2/windows/bin64/dmd.exe"],
     }),
 )
@@ -627,8 +627,8 @@ filegroup(
     srcs = select({
         ":darwin": ["dmd2/osx/lib/libphobos2.a"],
         ":k8": [
-            "dmd2/linux/lib64/libphobos2.a",
-            "dmd2/linux/lib64/libphobos2.so",
+            "ldc2-1.24.0-linux-x86_64/lib/libphobos2-ldc.a",
+            "ldc2-1.24.0-linux-x86_64/lib/libphobos2-ldc-shared.so",
         ],
         ":x64_windows": ["dmd2/windows/lib64/phobos64.lib"],
     }),
@@ -636,26 +636,42 @@ filegroup(
 
 filegroup(
     name = "phobos-src",
-    srcs = glob(["dmd2/src/phobos/**/*.*"]),
+    srcs = select({
+        '//conditions:default':
+            glob(["dmd2/src/phobos/**/*.*"]),
+        ":k8":
+            glob([
+                "ldc2-1.24.0-linux-x86_64/import/*.*",
+                "ldc2-1.24.0-linux-x86_64/import/**/*.*",
+            ]),
+    }),
 )
 
 filegroup(
     name = "druntime-import-src",
-    srcs = glob([
-        "dmd2/src/druntime/import/*.*",
-        "dmd2/src/druntime/import/**/*.*",
-    ]),
+    srcs = select({
+        '//conditions:default':
+            glob([
+              "dmd2/src/druntime/import/*.*",
+              "dmd2/src/druntime/import/**/*.*",
+            ]),
+        ":k8":
+            glob([
+                "ldc2-1.24.0-linux-x86_64/import/*.*",
+                "ldc2-1.24.0-linux-x86_64/import/**/*.*",
+            ]),
+    }),
 )
 """
 
 def d_repositories():
     http_archive(
-        name = "dmd_linux_x86_64",
-        urls = [
-            "http://downloads.dlang.org/releases/2020/dmd.2.094.0.linux.tar.xz",
-        ],
-        sha256 = "b77f8fdd7f0415d418eac3192186b7f4aa2f80e67bc415191cdd416548451576",
-        build_file_content = DMD_BUILD_FILE,
+         name = "dmd_linux_x86_64",
+         urls = [
+             "https://github.com/ldc-developers/ldc/releases/download/v1.24.0/ldc2-1.24.0-linux-x86_64.tar.xz",
+             ],
+         sha256 = "868e070fe90b06549f5fb19882a58a920c0052fad29b764eee9f409f08892ba3",
+         build_file_content = DMD_BUILD_FILE,
     )
 
     http_archive(

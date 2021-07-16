@@ -82,14 +82,14 @@ def _d_toolchain(ctx):
 COMPILATION_MODE_FLAGS_POSIX = {
     "fastbuild": ["-debug", "-g", "-L-lstdc++"],
     "dbg": ["-debug", "-g", "-L-lstdc++"],
-    "opt": ["-checkaction=halt", "-boundscheck=safeonly", #"-O",
+    "opt": ["-checkaction=halt", "-boundscheck=safeonly", "-O",
         "-L-lstdc++"],
 }
 
 COMPILATION_MODE_FLAGS_WINDOWS = {
     "fastbuild": ["-debug", "-g", "-m64", "-mscrtlib=msvcrt"],
     "dbg": ["-debug", "-g", "-m64", "-mscrtlib=msvcrtd"],
-    "opt": ["-checkaction=halt", "-boundscheck=safeonly", #"-O",
+    "opt": ["-checkaction=halt", "-boundscheck=safeonly", "-O",
         "-m64", "-mscrtlib=msvcrt"],
 }
 
